@@ -2,7 +2,7 @@
 
 import { Message } from "ai";
 import { cn } from "@/lib/utils";
-import { User, Loader2 } from "lucide-react";
+import { User, Bot, Loader2 } from "lucide-react";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 
 interface MessageListProps {
