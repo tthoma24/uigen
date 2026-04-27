@@ -3,9 +3,14 @@ import { render, screen, cleanup } from "@testing-library/react";
 import { MessageList } from "../MessageList";
 import type { Message } from "ai";
 
-// Mock the MarkdownRenderer component
 vi.mock("../MarkdownRenderer", () => ({
   MarkdownRenderer: ({ content }: { content: string }) => <div>{content}</div>,
+}));
+
+vi.mock("../ToolInvocationBadge", () => ({
+  ToolInvocationBadge: ({ toolInvocation }: any) => (
+    <div data-testid="tool-badge">{toolInvocation.toolName}</div>
+  ),
 }));
 
 afterEach(() => {
@@ -72,7 +77,7 @@ test("MessageList renders messages with parts", () => {
   render(<MessageList messages={messages} />);
 
   expect(screen.getByText("Creating your component...")).toBeDefined();
-  expect(screen.getByText("str_replace_editor")).toBeDefined();
+  expect(screen.getByTestId("tool-badge")).toBeDefined();
 });
 
 test("MessageList shows content for assistant message with content", () => {
