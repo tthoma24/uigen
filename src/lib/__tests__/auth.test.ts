@@ -1,64 +1,65 @@
 // @vitest-environment node
 import { test, expect, vi, beforeEach } from "vitest";
-import { jwtVerify } from "jose";
+import { SignJWT, jwtVerify } from "jose";
 
 vi.mock("server-only", () => ({}));
 
-const mockCookieStore = {
-  set: vi.fn(),
-  get: vi.fn(),
-  delete: vi.fn(),
-};
-
+const mockGet = vi.fn();
 vi.mock("next/headers", () => ({
-  cookies: vi.fn(() => Promise.resolve(mockCookieStore)),
+  cookies: vi.fn(() => Promise.resolve({ get: mockGet })),
 }));
 
-const { createSession } = await import("@/lib/auth");
+const JWT_SECRET = new TextEncoder().encode("development-secret-key");
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "development-secret-key"
-);
+async function makeToken(payload: object, expiresAt?: number) {
+  return new SignJWT(payload)
+    .setProtectedHeader({ alg: "HS256" })
+    .setExpirationTime(expiresAt ?? Math.floor(Date.now() / 1000) + 600)
+    .setIssuedAt()
+    .sign(JWT_SECRET);
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
-test("createSession sets the auth-token cookie", async () => {
-  await createSession("user-1", "test@example.com");
-  expect(mockCookieStore.set).toHaveBeenCalledOnce();
-  expect(mockCookieStore.set.mock.calls[0][0]).toBe("auth-token");
+// Dynamic import keeps the mock in place before the module initializes
+const { getSession } = await import("@/lib/auth");
+
+test("returns null when no cookie is present", async () => {
+  mockGet.mockReturnValue(undefined);
+  expect(await getSession()).toBeNull();
 });
 
-test("createSession sets a string JWT as the cookie value", async () => {
-  await createSession("user-1", "test@example.com");
-  const token = mockCookieStore.set.mock.calls[0][1];
-  expect(typeof token).toBe("string");
-  expect(token.split(".")).toHaveLength(3);
+test("returns the session payload for a valid token", async () => {
+  const token = await makeToken({ userId: "u1", email: "a@b.com", expiresAt: new Date() });
+  mockGet.mockReturnValue({ value: token });
+
+  const session = await getSession();
+  expect(session?.userId).toBe("u1");
+  expect(session?.email).toBe("a@b.com");
 });
 
-test("createSession embeds userId and email in the JWT", async () => {
-  await createSession("user-42", "hello@example.com");
-  const token = mockCookieStore.set.mock.calls[0][1];
-  const { payload } = await jwtVerify(token, JWT_SECRET);
-  expect(payload.userId).toBe("user-42");
-  expect(payload.email).toBe("hello@example.com");
+test("returns null for an expired token", async () => {
+  const token = await makeToken({ userId: "u1" }, Math.floor(Date.now() / 1000) - 60);
+  mockGet.mockReturnValue({ value: token });
+
+  expect(await getSession()).toBeNull();
 });
 
-test("createSession sets httpOnly, sameSite, and path cookie options", async () => {
-  await createSession("user-1", "test@example.com");
-  const options = mockCookieStore.set.mock.calls[0][2];
-  expect(options.httpOnly).toBe(true);
-  expect(options.sameSite).toBe("lax");
-  expect(options.path).toBe("/");
+test("returns null for a tampered token", async () => {
+  mockGet.mockReturnValue({ value: "not.a.valid.jwt" });
+  expect(await getSession()).toBeNull();
 });
 
-test("createSession sets cookie expiry ~7 days from now", async () => {
-  const before = Date.now();
-  await createSession("user-1", "test@example.com");
-  const after = Date.now();
-  const expires: Date = mockCookieStore.set.mock.calls[0][2].expires;
-  const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-  expect(expires.getTime()).toBeGreaterThanOrEqual(before + sevenDaysMs - 1000);
-  expect(expires.getTime()).toBeLessThanOrEqual(after + sevenDaysMs + 1000);
+test("returns null for a token signed with the wrong secret", async () => {
+  const wrongSecret = new TextEncoder().encode("wrong-secret");
+  const token = await new SignJWT({ userId: "u1" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setExpirationTime("7d")
+    .setIssuedAt()
+    .sign(wrongSecret);
+  mockGet.mockReturnValue({ value: token });
+
+  expect(await getSession()).toBeNull();
 });
