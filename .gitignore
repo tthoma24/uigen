@@ -49,3 +49,6 @@ next-env.d.ts
 # database
 /prisma/dev.db
 /prisma/dev.db-journal
+
+# ephemeral claude/playwright output
+/tmp/
