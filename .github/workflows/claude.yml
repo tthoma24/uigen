@@ -35,32 +35,17 @@ jobs:
           npm run setup
           npm run dev:daemon
 
-      - name: Debug Claude Auth
-        env:
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          ANTHROPIC_LOG: debug
+      - name: Install Claude Code
         run: |
-          set +e
-          echo "=== Installing Claude Code via npm ==="
-          npm install -g @anthropic-ai/claude-code 2>&1
-          echo "npm install exit code: $?"
-
-          echo ""
-          echo "=== claude --version (no auth required) ==="
-          claude --version 2>&1
-          echo "exit code: $?"
-
-          echo ""
-          echo "=== Testing auth with a simple prompt ==="
-          timeout 30 claude -p "respond with just: ok" --output-format text 2>&1
-          echo "exit code: $?"
+          npm install -g @anthropic-ai/claude-code
+          echo "CLAUDE_PATH=$(which claude)" >> $GITHUB_ENV
 
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          show_full_output: true
+          path_to_claude_code_executable: ${{ env.CLAUDE_PATH }}
 
           # This is an optional setting that allows Claude to read CI results on PRs
           additional_permissions: |
